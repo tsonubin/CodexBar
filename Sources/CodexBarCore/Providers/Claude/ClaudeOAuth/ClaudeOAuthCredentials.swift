@@ -677,6 +677,29 @@ public enum ClaudeOAuthCredentialsStore {
             return nil
         }
 
+        if self.shouldPreferSecurityCLIKeychainRead(),
+           let data = self.loadFromClaudeKeychainViaSecurityCLIIfEnabled(
+               interaction: ProviderInteractionContext.current),
+           let keychainCreds = try? ClaudeOAuthCredentials.parse(data: data)
+        {
+            guard keychainCreds.accessToken != cached.credentials.accessToken else { return nil }
+            if keychainCreds.isExpired, !cached.credentials.isExpired { return nil }
+
+            self.log.info("Claude keychain credentials changed; syncing OAuth cache")
+            let synced = ClaudeOAuthCredentialRecord(
+                credentials: keychainCreds,
+                owner: .claudeCLI,
+                source: .claudeKeychain)
+            self.writeMemoryCache(
+                record: ClaudeOAuthCredentialRecord(
+                    credentials: keychainCreds,
+                    owner: .claudeCLI,
+                    source: .memoryCache),
+                timestamp: now)
+            self.saveToCacheKeychain(data, owner: .claudeCLI)
+            return synced
+        }
+
         guard let currentFingerprint = self.currentClaudeKeychainFingerprintWithoutPrompt() else {
             return nil
         }
@@ -738,8 +761,8 @@ public enum ClaudeOAuthCredentialsStore {
         guard cached.owner == .claudeCLI else { return false }
         guard self.keychainAccessAllowed else { return false }
 
-        // Freshness sync is opportunistic and may perform Security.framework fingerprint checks.
-        // Keep this gated by the user's stored prompt policy even in experimental reader mode.
+        // Freshness sync is opportunistic. In experimental mode it stays on the security CLI path; otherwise it may
+        // perform Security.framework fingerprint checks. Keep it gated by the user's stored prompt policy either way.
         let mode = ClaudeOAuthKeychainPromptPreference.storedMode()
         switch mode {
         case .never:
@@ -1032,7 +1055,9 @@ public enum ClaudeOAuthCredentialsStore {
         #endif
         #if os(macOS)
         let candidates = self.claudeKeychainCandidatesWithoutPrompt(promptMode: promptMode)
+        var attemptedPrimaryCandidateRead = false
         if let newest = candidates.first {
+            attemptedPrimaryCandidateRead = true
             do {
                 if let data = try self.loadClaudeKeychainData(
                     candidate: newest,
@@ -1058,6 +1083,20 @@ public enum ClaudeOAuthCredentialsStore {
                 }
                 throw error
             }
+        }
+
+        guard self.shouldAttemptLegacySecurityFrameworkFallback(
+            allowKeychainPrompt: allowKeychainPrompt,
+            attemptedPrimaryCandidateRead: attemptedPrimaryCandidateRead)
+        else {
+            self.log.debug(
+                "Claude keychain legacy fallback skipped after interactive candidate read",
+                metadata: [
+                    "service": self.claudeKeychainService,
+                    "interactive": "\(allowKeychainPrompt)",
+                    "candidateCount": "\(candidates.count)",
+                ])
+            throw ClaudeOAuthCredentialsError.notFound
         }
 
         // Fallback: legacy query (may pick an arbitrary duplicate).
@@ -1351,58 +1390,8 @@ public enum ClaudeOAuthCredentialsStore {
         KeychainCacheStore.clear(key: self.cacheKey)
     }
 
-    private static var keychainAccessAllowed: Bool {
-        #if DEBUG
-        if let override = self.taskKeychainAccessOverride { return !override }
-        #endif
-        return !KeychainAccessGate.isDisabled
-    }
-
     private static var isPromptPolicyApplicable: Bool {
         ClaudeOAuthKeychainPromptPreference.isApplicable()
-    }
-
-    private static func securityFrameworkFallbackPromptDecision(
-        promptMode: ClaudeOAuthKeychainPromptMode,
-        allowKeychainPrompt: Bool,
-        respectKeychainPromptCooldown: Bool) -> (allowed: Bool, blockedReason: String?)
-    {
-        guard allowKeychainPrompt else {
-            return (allowed: false, blockedReason: "allowKeychainPromptFalse")
-        }
-        guard self.shouldAllowClaudeCodeKeychainAccess(mode: promptMode) else {
-            return (allowed: false, blockedReason: self.fallbackBlockedReason(promptMode: promptMode))
-        }
-        if respectKeychainPromptCooldown,
-           !ClaudeOAuthKeychainAccessGate.shouldAllowPrompt()
-        {
-            return (allowed: false, blockedReason: "cooldown")
-        }
-        return (allowed: true, blockedReason: nil)
-    }
-
-    private static func fallbackBlockedReason(promptMode: ClaudeOAuthKeychainPromptMode) -> String {
-        if !self.keychainAccessAllowed { return "keychainDisabled" }
-        switch promptMode {
-        case .never:
-            return "never"
-        case .onlyOnUserAction:
-            return "onlyOnUserAction-background"
-        case .always:
-            return "disallowed"
-        }
-    }
-
-    private static func shouldAllowClaudeCodeKeychainAccess(
-        mode: ClaudeOAuthKeychainPromptMode = ClaudeOAuthKeychainPromptPreference.current()) -> Bool
-    {
-        guard self.keychainAccessAllowed else { return false }
-        switch mode {
-        case .never: return false
-        case .onlyOnUserAction:
-            return ProviderInteractionContext.current == .userInitiated || self.allowBackgroundPromptBootstrap
-        case .always: return true
-        }
     }
 
     static func preferredClaudeKeychainAccountForSecurityCLIRead(

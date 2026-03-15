@@ -189,9 +189,9 @@ struct SettingsStoreCoverageTests {
     }
 
     @Test
-    func claudeKeychainReadStrategy_defaultsToSecurityFramework() {
+    func claudeKeychainReadStrategy_defaultsToSecurityCLIExperimental() {
         let settings = Self.makeSettingsStore()
-        #expect(settings.claudeOAuthKeychainReadStrategy == .securityFramework)
+        #expect(settings.claudeOAuthKeychainReadStrategy == .securityCLIExperimental)
     }
 
     @Test
@@ -212,7 +212,7 @@ struct SettingsStoreCoverageTests {
     }
 
     @Test
-    func claudeKeychainReadStrategy_invalidRawFallsBackToSecurityFramework() throws {
+    func claudeKeychainReadStrategy_invalidRawFallsBackToSecurityCLIExperimental() throws {
         let suite = "SettingsStoreCoverageTests-claude-keychain-read-strategy-invalid"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defaults.removePersistentDomain(forName: suite)
@@ -220,13 +220,13 @@ struct SettingsStoreCoverageTests {
         let configStore = testConfigStore(suiteName: suite)
 
         let settings = Self.makeSettingsStore(userDefaults: defaults, configStore: configStore)
-        #expect(settings.claudeOAuthKeychainReadStrategy == .securityFramework)
+        #expect(settings.claudeOAuthKeychainReadStrategy == .securityCLIExperimental)
     }
 
     @Test
     func claudePromptFreeCredentialsToggle_mapsToReadStrategy() {
         let settings = Self.makeSettingsStore()
-        #expect(settings.claudeOAuthPromptFreeCredentialsEnabled == false)
+        #expect(settings.claudeOAuthPromptFreeCredentialsEnabled == true)
 
         settings.claudeOAuthPromptFreeCredentialsEnabled = true
         #expect(settings.claudeOAuthKeychainReadStrategy == .securityCLIExperimental)

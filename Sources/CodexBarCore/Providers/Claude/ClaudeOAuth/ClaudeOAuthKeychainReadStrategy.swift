@@ -21,7 +21,7 @@ public enum ClaudeOAuthKeychainReadStrategyPreference {
         {
             return strategy
         }
-        return .securityFramework
+        return .securityCLIExperimental
     }
 
     #if DEBUG
