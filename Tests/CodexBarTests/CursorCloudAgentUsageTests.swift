@@ -173,6 +173,7 @@ struct CursorCloudAgentUsageTests {
                 if let body = request.httpBody,
                    let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
                 {
+                    #expect(json["teamId"] as? Int == 0)
                     #expect(json["startDate"] as? String == "1781921226000")
                     #expect(json["endDate"] as? String == "1784513226000")
                 }

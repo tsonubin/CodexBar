@@ -1440,6 +1440,9 @@ public struct CursorStatusProbe: Sendable {
         let maximumPages = 20
         while page <= maximumPages {
             var body: [String: Any] = [
+                // Cursor's dashboard uses teamId 0 for the signed-in user's individual usage.
+                // Omitting it can return team-scoped rows for team/business accounts.
+                "teamId": 0,
                 "pageSize": pageSize,
                 "page": page,
             ]
