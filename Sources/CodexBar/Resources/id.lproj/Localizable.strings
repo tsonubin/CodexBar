@@ -741,6 +741,7 @@
 "Latest billing day" = "Hari tagihan terbaru";
 "Latest billing day (%@)" = "Hari tagihan terbaru (%@)";
 "%@ left" = "%@ tersisa";
+"%@ this cycle" = "%@ siklus ini";
 "Resets %@" = "Reset %@";
 "Resets in %@" = "Reset dalam %@";
 "Resets now" = "Reset sekarang";
